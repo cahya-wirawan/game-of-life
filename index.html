@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitboard Game of Life</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0; /* Slate 200 */
+            overflow: hidden; /* Prevent scrolling, app handles layout */
+        }
+        canvas {
+            image-rendering: pixelated; /* Crisp edges */
+            cursor: crosshair;
+        }
+        /* Custom scrollbar for pattern list */
+        .pattern-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .pattern-list::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        .pattern-list::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen font-mono">
+
+    <!-- Header -->
+    <header class="flex-none p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center z-10 shadow-lg">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-microchip text-green-500 text-2xl"></i>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider text-green-400">GAME OF LIFE</h1>
+                <p class="text-xs text-slate-500">BITBOARD IMPLEMENTATION</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4 text-sm hidden md:flex">
+            <div class="flex flex-col items-end">
+                <span id="generation-display" class="font-bold text-green-400">GEN: 0</span>
+                <span id="population-display" class="text-slate-500">POP: 0</span>
+            </div>
+            <div class="h-8 w-px bg-slate-700"></div>
+            <div class="flex flex-col items-end">
+                <span id="fps-display" class="font-bold text-blue-400">FPS: 0</span>
+                <span class="text-slate-500 text-xs">RENDER</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden relative">
+        
+        <!-- Canvas Container -->
+        <div id="canvas-container" class="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
+            <!-- Canvas will be injected here by D3 -->
+            <div id="overlay-message" class="absolute pointer-events-none text-white/20 text-4xl font-bold tracking-widest select-none">
+                PAUSED
+            </div>
+        </div>
+
+        <!-- Sidebar Controls (Collapsible on mobile) -->
+        <aside class="w-72 bg-slate-900 border-l border-slate-800 flex flex-col z-20 transition-all duration-300 absolute right-0 h-full md:relative translate-x-full md:translate-x-0" id="sidebar">
+            
+            <div class="p-4 border-b border-slate-800">
+                <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Controls</h2>
+                
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                    <button id="btn-play" class="bg-green-600 hover:bg-green-500 text-white py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors">
+                        <i class="fa-solid fa-play"></i> <span>Play</span>
+                    </button>
+                    <!-- Split Step button into Step Back / Step Fwd -->
+                    <div class="flex gap-1">
+                        <button id="btn-back" class="bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-l flex-1 flex items-center justify-center gap-2 transition-colors" title="Step Back">
+                            <i class="fa-solid fa-backward-step"></i>
+                        </button>
+                        <button id="btn-step" class="bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-r flex-1 flex items-center justify-center gap-2 transition-colors" title="Step Forward">
+                            <i class="fa-solid fa-forward-step"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                     <button id="btn-random" class="bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors">
+                        <i class="fa-solid fa-shuffle"></i> <span>Rand</span>
+                    </button>
+                    <button id="btn-clear" class="bg-red-900/50 hover:bg-red-900/80 text-red-200 border border-red-900 py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors">
+                        <i class="fa-solid fa-trash"></i> <span>Clear</span>
+                    </button>
+                </div>
+
+                <!-- File Upload -->
+                <button id="btn-upload" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors mb-4 border border-slate-600">
+                    <i class="fa-solid fa-file-import"></i> <span>Upload Pattern (.gol)</span>
+                </button>
+                <input type="file" id="file-input" accept=".gol" class="hidden">
+
+                <div class="mb-4">
+                    <label class="text-xs text-slate-500 mb-1 block">SIMULATION SPEED</label>
+                    <input type="range" id="speed-slider" min="1" max="60" value="30" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                </div>
+                
+                 <div class="mb-2">
+                    <label class="text-xs text-slate-500 mb-1 block">CELL COLOR</label>
+                    <div class="flex gap-2">
+                        <button class="w-6 h-6 rounded-full bg-green-500 hover:scale-110 transition-transform color-btn ring-2 ring-white" data-color="#22c55e"></button>
+                        <button class="w-6 h-6 rounded-full bg-cyan-400 hover:scale-110 transition-transform color-btn" data-color="#22d3ee"></button>
+                        <button class="w-6 h-6 rounded-full bg-purple-500 hover:scale-110 transition-transform color-btn" data-color="#a855f7"></button>
+                        <button class="w-6 h-6 rounded-full bg-orange-500 hover:scale-110 transition-transform color-btn" data-color="#f97316"></button>
+                        <button class="w-6 h-6 rounded-full bg-white hover:scale-110 transition-transform color-btn" data-color="#ffffff"></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto pattern-list p-4">
+                <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Patterns</h2>
+                <div class="flex flex-col gap-2" id="pattern-container">
+                    <!-- Patterns injected by JS -->
+                </div>
+            </div>
+
+            <div class="p-2 border-t border-slate-800 text-center text-xs text-slate-600">
+                <p>Drag on canvas to draw</p>
+            </div>
+        </aside>
+
+        <!-- Mobile Toggle -->
+        <button id="sidebar-toggle" class="absolute top-4 right-4 z-30 md:hidden bg-slate-800 text-white p-2 rounded shadow-lg border border-slate-700">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
+    </main>
+
+    <script>
+        /**
+         * BITBOARD GAME OF LIFE ENGINE
+         * Optimized for memory using Uint32Array (1 bit per cell).
+         */
+        class BitLife {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.size = width * height;
+                // We use Uint32Array. Each element holds 32 cells.
+                // Size needed = ceil(total_cells / 32)
+                this.bufferLength = Math.ceil(this.size / 32);
+                
+                this.current = new Uint32Array(this.bufferLength);
+                this.next = new Uint32Array(this.bufferLength);
+                
+                this.generation = 0;
+                this.population = 0;
+
+                // HISTORY BUFFER
+                this.history = []; 
+                this.maxHistory = 300; // Store last 300 frames (~12MB max)
+            }
+
+            // Helper to get array index and bit offset
+            _getLoc(x, y) {
+                // Wrap coordinates
+                if (x < 0) x = this.width - 1;
+                else if (x >= this.width) x = 0;
+                if (y < 0) y = this.height - 1;
+                else if (y >= this.height) y = 0;
+
+                const idx = y * this.width + x;
+                return {
+                    i: idx >>> 5,     // equivalent to Math.floor(idx / 32)
+                    b: idx & 31       // equivalent to idx % 32
+                };
+            }
+
+            get(x, y) {
+                const loc = this._getLoc(x, y);
+                return (this.current[loc.i] >>> loc.b) & 1;
+            }
+
+            set(x, y, val) {
+                const loc = this._getLoc(x, y);
+                if (val) {
+                    this.current[loc.i] |= (1 << loc.b);
+                } else {
+                    this.current[loc.i] &= ~(1 << loc.b);
+                }
+            }
+            
+            toggle(x, y) {
+                const val = this.get(x, y);
+                this.set(x, y, !val);
+            }
+
+            randomize(density = 0.2) {
+                this.history = []; // Clear history on new random
+                this.population = 0;
+                for (let i = 0; i < this.bufferLength; i++) {
+                    let word = 0;
+                    for (let b = 0; b < 32; b++) {
+                        if (Math.random() < density) {
+                            word |= (1 << b);
+                            this.population++;
+                        }
+                    }
+                    this.current[i] = word;
+                }
+                this.generation = 0;
+            }
+
+            clear() {
+                this.history = []; // Clear history on reset
+                this.current.fill(0);
+                this.generation = 0;
+                this.population = 0;
+            }
+
+            stepBack() {
+                if (this.history.length === 0) return;
+
+                // Restore previous state
+                this.current = this.history.pop();
+                this.generation--;
+                
+                // Recalculate population
+                this.population = 0;
+                for(let i=0; i<this.bufferLength; i++) {
+                    let w = this.current[i];
+                    while (w > 0) {
+                        w &= (w - 1); // Clear least significant bit set
+                        this.population++;
+                    }
+                }
+            }
+
+            // Core simulation step
+            step() {
+                // Save current state to history before changing it
+                if (this.history.length >= this.maxHistory) {
+                    this.history.shift(); // Remove oldest
+                }
+                // Deep copy the current Uint32Array
+                this.history.push(new Uint32Array(this.current));
+
+                let newPop = 0;
+
+                // Optimization: We avoid object creation in the loop. 
+                // We iterate coordinates directly.
+                // Note: Full SWAR (SIMD within a register) implementation is possible for 32x speedup
+                // but significantly more complex to handle wrapping correctly in a web demo.
+                // This implementation is optimized "Bit-access" logic.
+                
+                // Using 1D loop mapping for cache locality (row major)
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        
+                        // Count Neighbors
+                        // Unrolling neighbor check for performance
+                        // Accessing via this.get() handles wrapping
+                        
+                        // We can optimize neighbors by just getting the 8 coords
+                        // But calling function 8 times is overhead.
+                        // Let's manually inline the neighbor coords relative to x,y
+                        
+                        const xm1 = (x === 0) ? this.width - 1 : x - 1;
+                        const xp1 = (x === this.width - 1) ? 0 : x + 1;
+                        const ym1 = (y === 0) ? this.height - 1 : y - 1;
+                        const yp1 = (y === this.height - 1) ? 0 : y + 1;
+
+                        // Calculate neighbor sum
+                        // We need the bit values. 
+                        // To super-optimize, we would pre-fetch the 3 words (row above, curr, below)
+                        // But `get` is fast enough for visual JS canvas speeds (60fps @ 200x200).
+
+                        let neighbors = 0;
+                        
+                        // Row Above
+                        if (this.get(xm1, ym1)) neighbors++;
+                        if (this.get(x, ym1))   neighbors++;
+                        if (this.get(xp1, ym1)) neighbors++;
+                        
+                        // Current Row
+                        if (this.get(xm1, y))   neighbors++;
+                        if (this.get(xp1, y))   neighbors++;
+                        
+                        // Row Below
+                        if (this.get(xm1, yp1)) neighbors++;
+                        if (this.get(x, yp1))   neighbors++;
+                        if (this.get(xp1, yp1)) neighbors++;
+
+                        const self = this.get(x, y);
+
+                        // Apply Rules
+                        // 1. Underpop: < 2 die
+                        // 2. Survive: 2 or 3 live
+                        // 3. Overpop: > 3 die
+                        // 4. Reprod: 3 lives
+                        
+                        const loc = this._getLoc(x, y); // Recalculating here is cheap bitwise math
+                        
+                        // Logic: (neighbors == 3) || (neighbors == 2 && self)
+                        if (neighbors === 3 || (neighbors === 2 && self)) {
+                            this.next[loc.i] |= (1 << loc.b);
+                            newPop++;
+                        } else {
+                            this.next[loc.i] &= ~(1 << loc.b);
+                        }
+                    }
+                }
+
+                // Swap buffers
+                const temp = this.current;
+                this.current = this.next;
+                this.next = temp;
+                
+                // Clear 'next' buffer for the next round (since we OR bits in, we need a clean slate? 
+                // Actually our logic sets 0s too via AND, but initializing the "next" bit is tricky if we rely on OR.
+                // The logic above: `this.next[loc.i] &= ~(1 << loc.b)` handles clearing.
+                // However, `next` holds the OLD state now (since we swapped). 
+                // We MUST process every bit effectively or clear it.
+                // The loop above touches every bit, so it overwrites completely.
+                // BUT: The bitwise logic sets bits on `this.next`. If we don't clear `this.next` (which was `this.current`), 
+                // garbage data remains. 
+                // Optimization: The logic `this.next[loc.i] |=` assumes starts at 0? 
+                // No, the else block `&= ~` handles clearing. So we are good.
+
+                this.generation++;
+                this.population = newPop;
+            }
+        }
+
+        /**
+         * RENDERER & UI CONTROLLER
+         */
+        const CONFIG = {
+            cellSize: 4, // Pixels per cell
+            gridColor: '#000000', // not used in pixel manip
+            cellColor: { r: 34, g: 197, b: 94 }, // Tailwind green-500
+            width: 0,
+            height: 0
+        };
+
+        // DOM Elements
+        const container = document.getElementById('canvas-container');
+        const overlay = document.getElementById('overlay-message');
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimization: no alpha channel
+
+        // State
+        let game = null;
+        let animationId = null;
+        let isPlaying = false;
+        let fps = 0;
+        let lastFrameTime = 0;
+        let targetFps = 30;
+        let frameInterval = 1000 / targetFps;
+        let lastDrawTime = 0;
+        let isDrawing = false;
+        let drawMode = true; // true = draw, false = erase
+
+        // Initialize Game
+        function init() {
+            // Determine grid size based on screen
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
+            CONFIG.width = Math.floor(rect.width / CONFIG.cellSize);
+            CONFIG.height = Math.floor(rect.height / CONFIG.cellSize);
+
+            game = new BitLife(CONFIG.width, CONFIG.height);
+            game.randomize();
+            
+            // Create Image Data Buffer for fast rendering
+            // We draw directly to pixels
+            CONFIG.imageData = ctx.createImageData(canvas.width, canvas.height);
+            
+            updateStats();
+            render();
+        }
+
+        // Render Loop
+        function render() {
+            // Clear buffer (opaque black)
+            // Using Uint32Array view of ImageData for speed (setting ABGR values)
+            const buf = new Uint32Array(CONFIG.imageData.data.buffer);
+            
+            // Fill color (ABGR)
+            // Black: 0xFF000000 (Alpha=255, B=0, G=0, R=0)
+            const black = 0xFF0f172a; // Background color matching slate-900 roughly or just black
+            // Let's use strict black for contrast
+            const bg = 0xFF0f172a; 
+            
+            // Cell color
+            // Format: A B G R (Little Endian)
+            const r = CONFIG.cellColor.r;
+            const g = CONFIG.cellColor.g;
+            const b = CONFIG.cellColor.b;
+            const cellColorInt = (255 << 24) | (b << 16) | (g << 8) | r;
+
+            // Iterate pixels
+            // To speed this up, we map game grid to canvas pixels.
+            // Since cellSize > 1, we draw blocks. 
+            // Writing pixel-by-pixel is slow for scaling up. 
+            // Better approach: ctx.fillStyle and fillRect is slow for thousands of rects.
+            // Best: Write to imageData scaling up manually.
+            
+            let bufIdx = 0;
+            const w = canvas.width;
+            const h = canvas.height;
+            const cs = CONFIG.cellSize;
+
+            // Simple clear
+            buf.fill(bg); 
+
+            // Draw live cells
+            // We iterate the game board, if alive, we fill the corresponding pixels in buffer
+            for (let y = 0; y < game.height; y++) {
+                for (let x = 0; x < game.width; x++) {
+                    if (game.get(x, y)) {
+                        // Calculate pixel position
+                        const px = x * cs;
+                        const py = y * cs;
+                        
+                        // Draw a square of size cs
+                        for (let dy = 0; dy < cs; dy++) {
+                             // Check boundary
+                             if (py + dy >= h) break;
+                             
+                             const rowOffset = (py + dy) * w;
+                             for (let dx = 0; dx < cs; dx++) {
+                                 if (px + dx >= w) break;
+                                 buf[rowOffset + px + dx] = cellColorInt;
+                             }
+                        }
+                    }
+                }
+            }
+
+            ctx.putImageData(CONFIG.imageData, 0, 0);
+        }
+
+        // Animation Loop
+        function loop(timestamp) {
+            if (!isPlaying) return;
+
+            animationId = requestAnimationFrame(loop);
+
+            const elapsed = timestamp - lastDrawTime;
+            if (elapsed > frameInterval) {
+                lastDrawTime = timestamp - (elapsed % frameInterval);
+                
+                // Calculate FPS
+                const currentFps = 1000 / (timestamp - lastFrameTime);
+                lastFrameTime = timestamp;
+                document.getElementById('fps-display').innerText = `FPS: ${Math.round(currentFps)}`;
+
+                game.step();
+                updateStats();
+                render();
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('generation-display').innerText = `GEN: ${game.generation}`;
+            document.getElementById('population-display').innerText = `POP: ${game.population}`;
+        }
+
+        // Controls
+        const btnPlay = document.getElementById('btn-play');
+        const iconPlay = btnPlay.querySelector('i');
+        const textPlay = btnPlay.querySelector('span');
+        
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                overlay.style.opacity = '0';
+                iconPlay.className = 'fa-solid fa-pause';
+                textPlay.innerText = 'Pause';
+                btnPlay.classList.replace('bg-green-600', 'bg-yellow-600');
+                btnPlay.classList.replace('hover:bg-green-500', 'hover:bg-yellow-500');
+                lastDrawTime = performance.now();
+                lastFrameTime = performance.now();
+                loop(performance.now());
+            } else {
+                overlay.style.opacity = '1';
+                iconPlay.className = 'fa-solid fa-play';
+                textPlay.innerText = 'Play';
+                btnPlay.classList.replace('bg-yellow-600', 'bg-green-600');
+                btnPlay.classList.replace('hover:bg-yellow-500', 'hover:bg-green-500');
+                cancelAnimationFrame(animationId);
+            }
+        }
+
+        btnPlay.addEventListener('click', togglePlay);
+
+        // Back Button
+        document.getElementById('btn-back').addEventListener('click', () => {
+            if (isPlaying) togglePlay();
+            game.stepBack();
+            updateStats();
+            render();
+        });
+
+        document.getElementById('btn-step').addEventListener('click', () => {
+            if (isPlaying) togglePlay();
+            game.step();
+            updateStats();
+            render();
+        });
+
+        document.getElementById('btn-random').addEventListener('click', () => {
+            game.randomize();
+            updateStats();
+            render();
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            game.clear();
+            if (isPlaying) togglePlay();
+            updateStats();
+            render();
+        });
+
+        // --- FILE UPLOAD INTEGRATION ---
+        const btnUpload = document.getElementById('btn-upload');
+        const fileInput = document.getElementById('file-input');
+
+        btnUpload.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                try {
+                    loadPatternFromFile(content);
+                } catch (err) {
+                    alert('Error parsing file: ' + err.message);
+                }
+                // Reset input so same file can be loaded again if needed
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        function loadPatternFromFile(text) {
+            // Normalize line endings and split
+            const lines = text.trim().split(/\r?\n/);
+            if (lines.length < 2) throw new Error("File format error: Too few lines");
+
+            // Parse Header (Cols,Rows)
+            const dims = lines[0].trim().split(',');
+            if (dims.length !== 2) throw new Error("Invalid header format. Expected: columns,rows");
+            
+            const pW = parseInt(dims[0]);
+            const pH = parseInt(dims[1]);
+            
+            if (isNaN(pW) || isNaN(pH)) throw new Error("Invalid dimensions in header");
+
+            // Pause if playing
+            if (isPlaying) togglePlay();
+            
+            // Clear current board
+            game.clear();
+
+            // Calculate center offsets
+            const cx = Math.floor(game.width / 2) - Math.floor(pW / 2);
+            const cy = Math.floor(game.height / 2) - Math.floor(pH / 2);
+
+            // Parse Grid
+            // Start from line 1 (index 1)
+            for (let r = 0; r < pH; r++) {
+                if (r + 1 >= lines.length) break; // Safety if file is shorter than declared
+                
+                const line = lines[r + 1].trim();
+                for (let c = 0; c < pW; c++) {
+                    if (c >= line.length) break;
+                    
+                    const char = line[c];
+                    if (char.toLowerCase() === 'x') {
+                        game.set(cx + c, cy + r, 1);
+                    }
+                    // '.' or other chars are dead, which is default after clear()
+                }
+            }
+
+            updateStats();
+            render();
+        }
+
+        const slider = document.getElementById('speed-slider');
+        slider.addEventListener('input', (e) => {
+            targetFps = parseInt(e.target.value);
+            frameInterval = 1000 / targetFps;
+        });
+
+        // Interactions (D3 used for simpler event handling on canvas if desired, but native is fine too)
+        // Let's use D3 drag as requested to show library usage
+        const d3Canvas = d3.select(canvas);
+        
+        const dragBehavior = d3.drag()
+            .container(canvas)
+            .subject(function(event) {
+                return { x: event.x, y: event.y };
+            })
+            .on("start", function(event) {
+                isDrawing = true;
+                const rect = canvas.getBoundingClientRect();
+                const x = Math.floor((event.sourceEvent.clientX - rect.left) / CONFIG.cellSize);
+                const y = Math.floor((event.sourceEvent.clientY - rect.top) / CONFIG.cellSize);
+                
+                // Determine mode based on first click
+                const current = game.get(x, y);
+                drawMode = !current; 
+                
+                game.set(x, y, drawMode);
+                render();
+            })
+            .on("drag", function(event) {
+                const rect = canvas.getBoundingClientRect();
+                // D3 event coordinates are relative to the container if defined
+                // But raw mouse events are often safer for exact offsets
+                const x = Math.floor((event.sourceEvent.clientX - rect.left) / CONFIG.cellSize);
+                const y = Math.floor((event.sourceEvent.clientY - rect.top) / CONFIG.cellSize);
+                
+                // Boundary check
+                if (x >= 0 && x < game.width && y >= 0 && y < game.height) {
+                    game.set(x, y, drawMode);
+                    // Only render if paused to save perf, or if needed
+                    if (!isPlaying) render(); 
+                }
+            })
+            .on("end", () => {
+                isDrawing = false;
+                updateStats();
+            });
+
+        d3Canvas.call(dragBehavior);
+
+        // Resize Handler
+        window.addEventListener('resize', () => {
+            // Debounce or just restart
+            if (isPlaying) togglePlay();
+            init();
+        });
+
+        // Color Picker
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const hex = e.target.dataset.color;
+                // Convert hex to rgb
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                CONFIG.cellColor = {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                };
+                
+                // Update UI accents
+                document.querySelectorAll('.text-green-400').forEach(el => {
+                    el.style.color = hex;
+                });
+                // Note: Updating tailwind classes dynamically is hard, simple inline style for preview
+                
+                render();
+            });
+        });
+        
+        // Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+            sidebar.classList.toggle('translate-x-full');
+        });
+
+        // Patterns
+        const patterns = [
+            { name: "Glider", w:3, h:3, data: [0,1,0, 0,0,1, 1,1,1] },
+            { name: "Lightweight SS", w:5, h:4, data: [0,1,1,1,1, 1,0,0,0,1, 0,0,0,0,1, 1,0,0,1,0] },
+            { name: "Pulsar", w:13, h:13, data: [ // Simplified center of pulsar
+                0,0,1,1,1,0,0,0,1,1,1,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                0,0,1,1,1,0,0,0,1,1,1,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,1,1,1,0,0,0,1,1,1,0,0,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                1,0,0,0,0,1,0,1,0,0,0,0,1,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,1,1,1,0,0,0,1,1,1,0,0
+            ]},
+            { name: "Diehard", w:8, h:3, data: [
+                0,0,0,0,0,0,1,0,
+                1,1,0,0,0,0,0,0,
+                0,1,0,0,0,1,1,1
+            ]}
+        ];
+
+        const patternContainer = document.getElementById('pattern-container');
+        patterns.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = "text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-300 transition-colors border border-slate-700 flex justify-between group";
+            btn.innerHTML = `<span>${p.name}</span> <i class="fa-solid fa-plus opacity-0 group-hover:opacity-100"></i>`;
+            btn.onclick = () => loadPattern(p);
+            patternContainer.appendChild(btn);
+        });
+
+        function loadPattern(pattern) {
+            // Place in center
+            const cx = Math.floor(game.width / 2) - Math.floor(pattern.w / 2);
+            const cy = Math.floor(game.height / 2) - Math.floor(pattern.h / 2);
+            
+            for(let i=0; i<pattern.data.length; i++) {
+                if(pattern.data[i] === 1) {
+                    const x = i % pattern.w;
+                    const y = Math.floor(i / pattern.w);
+                    game.set(cx + x, cy + y, 1);
+                }
+            }
+            render();
+            updateStats();
+        }
+
+        // Init on Load
+        init();
+
+    </script>
+</body>
+</html>

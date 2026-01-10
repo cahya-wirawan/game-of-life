@@ -1,2 +1,1 @@
-# game-of-life
-Game of Life Simulation
+# Game of Life Simulation
