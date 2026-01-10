@@ -124,6 +124,15 @@
                     <label class="text-xs text-slate-500 mb-1 block">SIMULATION SPEED</label>
                     <input type="range" id="speed-slider" min="1" max="60" value="30" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500">
                 </div>
+
+                <!-- Cell Size Slider -->
+                <div class="mb-4">
+                    <label class="text-xs text-slate-500 mb-1 block">CELL SIZE (ZOOM)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="range" id="size-slider" min="1" max="32" value="4" class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        <span id="size-value" class="text-xs text-slate-400 w-8 text-right font-mono">4px</span>
+                    </div>
+                </div>
                 
                  <div class="mb-2">
                     <label class="text-xs text-slate-500 mb-1 block">CELL COLOR</label>
@@ -665,6 +674,25 @@
         slider.addEventListener('input', (e) => {
             targetFps = parseInt(e.target.value);
             frameInterval = 1000 / targetFps;
+        });
+
+        // Cell Size Control
+        const sizeSlider = document.getElementById('size-slider');
+        const sizeValue = document.getElementById('size-value');
+
+        sizeSlider.addEventListener('input', (e) => {
+            sizeValue.innerText = `${e.target.value}px`;
+        });
+
+        sizeSlider.addEventListener('change', (e) => {
+            const val = parseInt(e.target.value);
+            if (val === CONFIG.cellSize) return;
+            
+            CONFIG.cellSize = val;
+            
+            // Re-init game with new dimensions
+            if (isPlaying) togglePlay();
+            init();
         });
 
         // Interactions (D3 used for simpler event handling on canvas if desired, but native is fine too)
