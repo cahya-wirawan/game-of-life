@@ -48,6 +48,7 @@
                 <a class="text-xs text-slate-500 hover:text-amber-400" href="https://github.com/cahya-wirawan/game-of-life" target="_blank" rel="noopener noreferrer" class="github-link">
                     View on GitHub: cahya-wirawan/game-of-life
                 </a>
+        <br>
             </div>
         </div>
         
@@ -94,6 +95,14 @@
                             <i class="fa-solid fa-forward-step"></i>
                         </button>
                     </div>
+                </div>
+
+                <!-- Jump to Generation -->
+                <div class="flex gap-2 mb-4">
+                    <input type="number" id="goto-gen" placeholder="Jump to Gen #" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-300 focus:border-green-500 focus:outline-none placeholder-slate-600">
+                    <button id="btn-goto" class="bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors" title="Go to Generation">
+                        <i class="fa-solid fa-rocket"></i>
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 mb-4">
@@ -520,6 +529,50 @@
         document.getElementById('btn-step').addEventListener('click', () => {
             if (isPlaying) togglePlay();
             game.step();
+            updateStats();
+            render();
+        });
+
+        // Jump to Generation
+        const btnGoto = document.getElementById('btn-goto');
+        const inputGoto = document.getElementById('goto-gen');
+
+        btnGoto.addEventListener('click', () => {
+            let target = parseInt(inputGoto.value);
+            if (isNaN(target) || target < 0) return;
+
+            if (isPlaying) togglePlay();
+
+            const current = game.generation;
+
+            if (target > current) {
+                // Moving Forward
+                const diff = target - current;
+                
+                // Warn for large jumps (optional safeguard)
+                if (diff > 5000) {
+                    if(!confirm(`Jumping ${diff} generations might take a moment. Continue?`)) return;
+                }
+                
+                // Execute steps fast
+                for (let i = 0; i < diff; i++) {
+                    game.step();
+                }
+
+            } else if (target < current) {
+                // Moving Backward via History
+                while (game.generation > target && game.history.length > 0) {
+                    game.stepBack();
+                }
+                
+                if (game.generation !== target) {
+                    // Feedback if limit reached
+                    inputGoto.classList.add('border-red-500');
+                    setTimeout(() => inputGoto.classList.remove('border-red-500'), 1000);
+                    // alert(`Could only rewind to generation ${game.generation} (History limit reached).`);
+                }
+            }
+
             updateStats();
             render();
         });
