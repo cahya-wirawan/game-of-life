@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitboard Game of Life</title>
+    <title>Game of Life</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -45,7 +45,9 @@
             <i class="fa-solid fa-microchip text-green-500 text-2xl"></i>
             <div>
                 <h1 class="text-xl font-bold tracking-wider text-green-400">GAME OF LIFE</h1>
-                <p class="text-xs text-slate-500">BITBOARD IMPLEMENTATION</p>
+                <a class="text-xs text-slate-500 hover:text-amber-400" href="https://github.com/cahya-wirawan/game-of-life" target="_blank" rel="noopener noreferrer" class="github-link">
+                    View on GitHub: cahya-wirawan/game-of-life
+                </a>
             </div>
         </div>
         
@@ -147,7 +149,7 @@
 
     <script>
         /**
-         * BITBOARD GAME OF LIFE ENGINE
+         * GAME OF LIFE ENGINE
          * Optimized for memory using Uint32Array (1 bit per cell).
          */
         class BitLife {
